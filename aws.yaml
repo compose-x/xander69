@@ -1,0 +1,76 @@
+---
+# Extension file with RDS & EFS
+
+version: "3.8"
+services:
+  osticket:
+    environment: # This needs to be set for Mariadb. For Aurora, use the secret.
+      MYSQL_DATABASE: osticketdb
+
+x-rds:
+  osticketdb:
+    MacroParameters:
+      Engine: mariadb #aurora-mysql
+      EngineVersion: "10.6.5" # 8.0.mysql_aurora.3.02.0
+    Services:
+      osticket:
+        Access:
+          DBCluster: RO
+        SecretsMappings:
+          Mappings:
+            - SecretKey: host
+              VarName: MYSQL_HOST
+#            - SecretKey: dbname
+#              VarName: MYSQL_DATABASE
+            - SecretKey: username
+              VarName: MYSQL_USER
+            - SecretKey: password
+              VarName: MYSQL_PASSWORD
+            - SecretKey: password
+              VarName: MYSQL_ROOT_PASSWORD
+
+#x-route53:
+#  PublicZone:
+#    Lookup: true
+#    ZoneName: bdd-testing.compose-x.io # Change domain name here
+
+x-elbv2:
+  public-alb:
+#    DnsAliases:
+#      - Names:
+#          - osticket.bdd-testing.compose-x.io # Change domain name here
+#        Route53Zone: x-route53::PublicZone
+    Properties:
+      Type: application
+      Scheme: internet-facing
+    MacroParameters:
+      Ingress:
+        ExtSources:
+          - IPv4: "0.0.0.0/0"
+            Description: ANY
+    Listeners:
+      - Port: 80 # ALB HTTP Listener, sends all traffic to osticket
+        Protocol: HTTP
+        Targets:
+          - name: osticket:osticket
+            access: /
+    Services: # Target Group, osticket container, on port 80, and checking on path `/`
+      - name: osticket:osticket
+        port: 80
+        protocol: HTTP
+        healthcheck: 80:HTTP:7:2:15:5:/
+
+#x-vpc:
+#  Lookup:
+#    VpcId:
+#      Tags:
+#        - Name: docker-ecs-test-vpc
+#    PublicSubnets: # ** not used **
+#      Tags:
+#        - Name: docker-ecs-test-subnet-public1-us-east-1a
+#    AppSubnets:
+#      Tags:
+#        - Name: docker-ecs-test-subnet-public1-us-east-1a
+#    StorageSubnets:
+#      Tags:
+#        - Name: docker-ecs-project-subnet-private1-us-east-1a
